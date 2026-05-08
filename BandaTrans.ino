@@ -8,11 +8,11 @@ const int ldrPin = A0, sensor = A1;
 const int led = 11, bombillo = 7, ventilador = 5;
 
 // ───────── Umbrales ─────────
-const int UMBRAL_LDR = 170;
+const int UMBRAL_LDR = 300;
 const int DISTANCIA_MIN_INICIO = 1,  DISTANCIA_MAX_INICIO = 25;
-const int DISTANCIA_MIN_BANDA2 = 7,  DISTANCIA_MAX_BANDA2 = 22;
+const int DISTANCIA_MIN_BANDA2 = 4,  DISTANCIA_MAX_BANDA2 = 22;
 const int TEMP_IDEAL_MIN = 70,       TEMP_IDEAL_MAX = 95;
-const int velocidad = 150;
+const int velocidad = 170;
 
 // ───────── Tiempos ─────────
 const unsigned long TIEMPO_ESPERA            = 5000;
@@ -221,10 +221,6 @@ void loop() {
     if (tEnReversa >= TIEMPO_REVERSA_MIN &&
         contadorPaqueteFueraBanda2 >= LECTURAS_PAQUETE_FUERA_BANDA2) {
       Serial.println("PAQUETE FUERA DE BANDA 2 - REINICIO");
-      reiniciarSistema(); delay(50); return;
-    }
-    if (tEnReversa >= TIEMPO_REVERSA_MAX) {
-      Serial.println("REVERSA POR TIEMPO MAXIMO - REINICIO DE SEGURIDAD");
       reiniciarSistema(); delay(50); return;
     }
   }
