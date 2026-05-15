@@ -8,9 +8,10 @@ const int ldrPin = A0, sensor = A1;
 const int led = 11, bombillo = 7, ventilador = 5;
 
 // ───────── Umbrales ─────────
-const int UMBRAL_LDR = 300;
+const int UMBRAL_LDR = 250;
 const int DISTANCIA_MIN_INICIO = 1,  DISTANCIA_MAX_INICIO = 25;
-const int DISTANCIA_MIN_BANDA2 = 4,  DISTANCIA_MAX_BANDA2 = 22;
+const int DISTANCIA_MIN_BANDA2 = 4,  DISTANCIA_MAX_BANDA2 = 25;
+const int DISTANCIA_MAX_ARRANQUE_B2 = 27;   // rango de arranque de banda 2
 const int TEMP_IDEAL_MIN = 70,       TEMP_IDEAL_MAX = 95;
 const int velocidad = 170;
 
@@ -32,6 +33,8 @@ bool recorridoIniciado = false, recorridoBanda1Completado = false;
 int contadorFinBanda1 = 0, contadorPaqueteFueraBanda2 = 0;
 unsigned long tiempoEspera = 0, tiempoReversa = 0;
 unsigned long tiempoRetiroPaquete = 0, tiempoAdelanteBanda2 = 0;
+bool primerPaqueteSalioInicio = false;
+bool bloqueoDobleCaja = false;
 
 enum EstadoBanda1 { BANDA1_DETENIDA, BANDA1_CORRIENDO };
 enum EstadoBanda2 { DETENIDO, ADELANTE, ESPERANDO, REVERSA };
@@ -59,6 +62,8 @@ void reiniciarSistema() {
   paqueteConfirmadoEnInicio = recorridoIniciado = recorridoBanda1Completado = tempIdeal = false;
   tiempoEspera = tiempoReversa = tiempoRetiroPaquete = tiempoAdelanteBanda2 = 0;
   contadorFinBanda1 = contadorPaqueteFueraBanda2 = 0;
+  primerPaqueteSalioInicio = false;
+  bloqueoDobleCaja = false;
   Serial.println("SISTEMA REINICIADO");
 }
 
@@ -107,6 +112,38 @@ void loop() {
   bool paqueteValidoEnInicio = laserDetectaPaquete && ultrasonicoInicioDetectaPaquete;
 
   analogWrite(PWM_MOTORES, velocidad);
+
+  // --- Detección de DOS PAQUETES ---
+  // Después de que banda 1 arrancó, marcamos cuando el primer paquete dejó
+  // de ser detectado (salió del sensor). Si luego LDR + ultrasónico vuelven
+  // a detectar paquete, es un segundo paquete: paramos todo.
+  if (recorridoIniciado && !paqueteValidoEnInicio) {
+    primerPaqueteSalioInicio = true;
+  }
+  if (!bloqueoDobleCaja && recorridoIniciado &&
+      primerPaqueteSalioInicio && paqueteValidoEnInicio) {
+    bloqueoDobleCaja = true;
+    digitalWrite(IN3, LOW);
+    motor2(LOW, LOW);
+    apagarTermicos();
+    Serial.println("DOS PAQUETES DETECTADOS - SISTEMA DETENIDO");
+  }
+  if (bloqueoDobleCaja) {
+    digitalWrite(IN3, LOW);
+    motor2(LOW, LOW);
+    apagarTermicos();
+
+    bool inicioLibre = !paqueteValidoEnInicio;
+    bool banda2Libre = (distancia2 == 0 || distancia2 > DISTANCIA_MAX_BANDA2);
+
+    if (inicioLibre && banda2Libre) {
+      Serial.println("BANDAS LIBRES - REINICIO");
+      reiniciarSistema();
+    }
+
+    delay(50);
+    return;
+  }
 
   // --- Paquete retirado antes de iniciar ---
   if (paqueteConfirmadoEnInicio && !paqueteValidoEnInicio &&
@@ -174,7 +211,7 @@ void loop() {
   if (estadoBanda2 == DETENIDO) {
     motor2(LOW, LOW);
     if (recorridoBanda1Completado &&
-        distancia2 > DISTANCIA_MIN_BANDA2 && distancia2 < DISTANCIA_MAX_BANDA2) {
+        distancia2 > DISTANCIA_MIN_BANDA2 && distancia2 < DISTANCIA_MAX_ARRANQUE_B2) {
       estadoBanda2 = ADELANTE;
       tiempoAdelanteBanda2 = millis();
       Serial.println("BANDA 2 INICIA ADELANTE");
